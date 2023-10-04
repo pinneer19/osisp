@@ -1,7 +1,6 @@
 #include "windows.h"
 #include "resource.h"
 #include "cmath"
-#pragma comment(lib, "msimg32.lib")
 
 WNDCLASS MyRegisterClass(HINSTANCE hInstance);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -11,9 +10,6 @@ enum Path {
 
 // global vars
 RECT clientRect;
-HBITMAP pattern;
-HBITMAP cat;
-BLENDFUNCTION bld = { AC_SRC_OVER, 0, 127, 0 };
 RECT object = {100, 250, 25, 25};
 HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255)); // White brush
 HBRUSH grayBrush = CreateSolidBrush(RGB(127, 127, 127)); // Gray brush
@@ -108,7 +104,6 @@ void ShowRectangle(HDC dc) {
     HGDIOBJ oldPen = SelectObject(memDC, pen);
     Rectangle(memDC, clientRect.left, clientRect.top, clientRect.right - 20, clientRect.bottom - 100);
     SelectObject(memDC, oldBrush);
-    //DeleteObject(oldBrush);
     SelectObject(memDC, oldPen);
     DeleteObject(pen);
 
@@ -116,7 +111,6 @@ void ShowRectangle(HDC dc) {
 
     Ellipse(memDC, object.left, object.top, object.right, object.bottom);
     SelectObject(memDC, oldBrush);
-    //DeleteObject(oldBrush);
 
     BitBlt(dc, 10, 10, clientRect.right - clientRect.left, clientRect.bottom - clientRect.top, memDC, 0,0, SRCCOPY);
     
@@ -133,8 +127,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
         return EXIT_FAILURE;
     }
 
-    pattern = LoadBitmap(hInstance, MAKEINTRESOURCE(IDB_BITMAP2));
-    cat = pattern;
     HWND hWnd = CreateWindow(wc.lpszClassName, L"Animation", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1000, 640, nullptr, nullptr, wc.hInstance, nullptr);
 
     if (hWnd == INVALID_HANDLE_VALUE)
@@ -199,7 +191,6 @@ WNDCLASS MyRegisterClass(HINSTANCE hInstance)
     wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON1));
     wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    //wcex.lpszMenuName   = MAKEINTRESOURCEW(IDC_LAB2);
     wcex.lpszClassName = L"CLASSNAME";
 
     return wcex;
