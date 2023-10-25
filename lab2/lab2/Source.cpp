@@ -10,7 +10,7 @@ enum Path {
 
 // global vars
 RECT clientRect;
-RECT object = {100, 250, 25, 25};
+RECT object = {250, 250, 25, 25};
 HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255)); // White brush
 HBRUSH grayBrush = CreateSolidBrush(RGB(127, 127, 127)); // Gray brush
 HBRUSH blueBrush = CreateSolidBrush(RGB(0, 0, 255)); // Blue brush
@@ -18,6 +18,7 @@ bool forward = true;
 bool isAnimating = false;
 float speed = 1;
 Path path = STRAIGHT;
+HHOOK g_hHook = NULL; // Hook for detecting 'Enter' clicks
 
 #define BTN_1 1
 #define BTN_2 2
@@ -28,19 +29,43 @@ Path path = STRAIGHT;
 #define BTN_7 7
 HWND btn1 = nullptr, btn2 = nullptr, btn3 = nullptr, btn4 = nullptr, btn5 = nullptr, btn6 = nullptr, btn7 = nullptr;
 
+// Keyboard hook procedure(here just copy-paste logic for start animation button described below)
+LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0) {
+        if (wParam == WM_KEYDOWN) {
+            KBDLLHOOKSTRUCT* kbData = (KBDLLHOOKSTRUCT*)lParam;
+            if (kbData->vkCode == VK_RETURN) {
+                // Enter key is pressed
+                isAnimating = !isAnimating;
+
+                if (isAnimating) {
+                    SetWindowText(btn1, L"| |");
+                }
+                else {
+                    SetWindowText(btn1, L"\u25B6");
+                }
+            }
+        }
+    }
+    return CallNextHookEx(g_hHook, nCode, wParam, lParam);
+}
+
 void ClearPosition(HWND hWnd) {
     isAnimating = false;
     SetWindowText(GetDlgItem(hWnd, BTN_1), L"\u25B6");
     object = { 100, 250, 25, 25 };
     speed = 1;
 }
-int counter = 0;
+
+int counter = 0; // using for ellipsis animation
+
 void moveArray(Path path = STRAIGHT) {
 
     if (path == STRAIGHT) {
         if (forward) object.left += 3;
         else object.left -= 3;
-        if (object.left >= clientRect.right - clientRect.left - 50) forward = false;
+        // Ellipse(memDC, object.left, object.top + 50, object.right + 100, object.bottom);
+        if (object.left >= clientRect.right - clientRect.left - 150) forward = false;
         if (object.left <= 0) forward = true;
         object.right = object.left + 25;
         object.bottom = object.top + 25;
@@ -94,9 +119,11 @@ void moveArray(Path path = STRAIGHT) {
 }
 
 void ShowRectangle(HDC dc) {
+    // selectobject - selects an object into the specified device context (DC), second parameter - hgdiobj (brush, pen, font)
+    // returns old object that new replaces
     SelectObject(dc, grayBrush);
-    HDC memDC = CreateCompatibleDC(dc);
-    HBITMAP memBM = CreateCompatibleBitmap(dc, clientRect.right - clientRect.left - 20, clientRect.bottom - clientRect.top - 100);
+    HDC memDC = CreateCompatibleDC(dc); // creating memory dc for specified dc
+    HBITMAP memBM = CreateCompatibleBitmap(dc, clientRect.right - clientRect.left - 20, clientRect.bottom - clientRect.top - 100); // creating bitmap in our dc with specified width and height
     SelectObject(memDC, memBM);
     
     HGDIOBJ oldBrush = SelectObject(memDC, whiteBrush);
@@ -112,6 +139,7 @@ void ShowRectangle(HDC dc) {
     Ellipse(memDC, object.left, object.top, object.right, object.bottom);
     SelectObject(memDC, oldBrush);
 
+    // transferring bits of color data from memDC to dc, (10,10) - upper left corner for dest rectangel; width and height of rectangles, source dc, upper-left corner in source dc, flag for direct copying
     BitBlt(dc, 10, 10, clientRect.right - clientRect.left, clientRect.bottom - clientRect.top, memDC, 0,0, SRCCOPY);
     
     DeleteDC(memDC);
@@ -121,6 +149,14 @@ void ShowRectangle(HDC dc) {
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdShow)
 {
+    // Setting hook (NULL for dll where we can describe hook procedure, 0 is thread id(default for connecting with all existing threads)
+    // WH_KEYBOARD_LL - low level keyboard detector(more recommended than WM_KEYBOARD)
+    g_hHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHookProc, NULL, 0);
+
+    if (g_hHook == NULL) {
+        MessageBox(NULL, L"Failed to install keyboard hook!", L"Error", MB_ICONERROR);
+        return 1;
+    }
 
     WNDCLASS wc = MyRegisterClass(hInstance);
     if (!RegisterClass(&wc)) {
@@ -138,12 +174,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
 
-    HDC dc = GetDC(hWnd);
+    HDC dc = GetDC(hWnd); // get current window device context
     MSG msg;
-    // Цикл основного сообщения:
+    // Main message cycle:
     
     while (1)
     {
+        // check if message exist in queue, pm_remove removes messages from queue after processing
         if (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) break;
             TranslateMessage(&msg);
@@ -171,6 +208,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdSh
         }
     }
 
+    // Uninstall the keyboard hook when done
+    UnhookWindowsHookEx(g_hHook);
+
     return EXIT_SUCCESS;
 }
 
@@ -183,13 +223,13 @@ WNDCLASS MyRegisterClass(HINSTANCE hInstance)
 {
     WNDCLASS wcex{ sizeof(WNDCLASS) };
 
-    wcex.style = CS_HREDRAW | CS_VREDRAW;
+    wcex.style = CS_HREDRAW | CS_VREDRAW; // vertical or horizontal redrawing
     wcex.lpfnWndProc = WndProc;
     wcex.cbClsExtra = 0;
     wcex.cbWndExtra = 0;
     wcex.hInstance = hInstance;
-    wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON1));
-    wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON1)); // makeintresource converts integer value to resource type
+    wcex.hCursor = LoadCursor(nullptr, IDC_ARROW); // null for loading predefined cursor
     wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     wcex.lpszClassName = L"CLASSNAME";
 
@@ -200,6 +240,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
     {
+
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case BTN_1:
@@ -207,10 +248,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             isAnimating = !isAnimating;
 
             if (isAnimating) {
-                SetWindowText(GetDlgItem(hWnd, BTN_1), L"| |");
+                SetWindowText(btn1, L"| |");
             }
             else {
-                SetWindowText(GetDlgItem(hWnd, BTN_1), L"\u25B6");
+                SetWindowText(btn1, L"\u25B6");
             }
 
             break;
@@ -250,7 +291,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         }
         break;
-    
+
     case WM_DESTROY:
         PostQuitMessage(0);
         break;
@@ -287,7 +328,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
 
         btn1 = CreateWindow(L"BUTTON", L"\u25B6", WS_VISIBLE | WS_CHILD, clientRect.left + 20, clientRect.bottom - 80, 70, 70,
-            hWnd, reinterpret_cast<HMENU>(BTN_1), NULL, NULL);   
+            hWnd, reinterpret_cast<HMENU>(BTN_1), NULL, NULL);
         btn2 = CreateWindow(L"BUTTON", L"0.5x", WS_VISIBLE | WS_CHILD, clientRect.left + 100, clientRect.bottom - 80, 70, 70,
             hWnd, reinterpret_cast<HMENU>(BTN_2), NULL, NULL);
         btn3 = CreateWindow(L"BUTTON", L"1x", WS_VISIBLE | WS_CHILD, clientRect.left + 180, clientRect.bottom - 80, 70, 70,
@@ -302,13 +343,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             hWnd, reinterpret_cast<HMENU>(BTN_7), NULL, NULL);
         break;
     case WM_PAINT:
-    {   
+    {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps); // handle to context device
         HPEN pen = CreatePen(PS_SOLID, 2, RGB(255, 0, 0));
         HGDIOBJ oldPen = SelectObject(hdc, pen);
         Rectangle(hdc, clientRect.left + 10, clientRect.top + 10, clientRect.right - 20, clientRect.bottom - 90);
         EndPaint(hWnd, &ps);
+        break;
     }
     break;
 
